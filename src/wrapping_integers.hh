@@ -17,11 +17,11 @@ public:
   static Wrap32 wrap( uint64_t n, Wrap32 zero_point );
 
   /*
-   * The unwrap method returns an absolute sequence number that wraps to this Wrap32, given the zero point
-   * and a "checkpoint": another absolute sequence number near the desired answer.
+   * unwrap 方法返回一个绝对序列号：在给定零点（zero point）时，该绝对序列号会映射到此 Wrap32，
+   * 并使用一个“检查点”（checkpoint）：另一个接近期望结果的绝对序列号。
    *
-   * There are many possible absolute sequence numbers that all wrap to the same Wrap32.
-   * The unwrap method should return the one that is closest to the checkpoint.
+   * 可能存在多个绝对序列号映射到同一个 Wrap32。
+   * unwrap 方法应返回与检查点最接近的那个绝对序列号。
    */
   uint64_t unwrap( Wrap32 zero_point, uint64_t checkpoint ) const;
 
