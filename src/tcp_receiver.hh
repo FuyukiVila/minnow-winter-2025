@@ -27,4 +27,5 @@ public:
 
 private:
   Reassembler reassembler_;
+  std::optional<Wrap32> isn_ {}; // 初始序列号
 };
