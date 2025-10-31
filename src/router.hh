@@ -34,4 +34,16 @@ public:
 private:
   // The router's collection of network interfaces
   std::vector<std::shared_ptr<NetworkInterface>> interfaces_ {};
+
+  // 路由表条目
+  struct RouteEntry
+  {
+    uint32_t route_prefix;           // 路由前缀
+    uint8_t prefix_length;           // 前缀长度
+    std::optional<Address> next_hop; // 下一跳地址（如果为空则是直连网络）
+    size_t interface_num;            // 出接口编号
+  };
+
+  // 路由表
+  std::vector<RouteEntry> routing_table_ {};
 };
