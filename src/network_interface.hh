@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <queue>
+#include <unordered_map>
 
 // A "network interface" that connects IP (the internet layer, or network layer)
 // with Ethernet (the network access layer, or link layer).
@@ -82,4 +83,23 @@ private:
 
   // Datagrams that have been received
   std::queue<InternetDatagram> datagrams_received_ {};
+
+  // ARP 缓存：IP 地址到以太网地址的映射及其过期时间
+  struct ARPEntry
+  {
+    EthernetAddress eth_addr;
+    size_t ttl_ms; // 剩余生存时间（毫秒）
+  };
+  std::unordered_map<uint32_t, ARPEntry> arp_cache_ {}; // IP -> (以太网地址, TTL)
+
+  // 等待 ARP 解析的数据报队列
+  std::unordered_map<uint32_t, std::queue<InternetDatagram>> pending_datagrams_ {}; // IP -> 待发送的数据报队列
+
+  // 最近发送 ARP 请求的记录（用于防止重复请求）
+  std::unordered_map<uint32_t, size_t> arp_request_sent_ {}; // IP -> 发送后经过的时间（毫秒）
+
+  // ARP 缓存的 TTL（30秒）
+  static constexpr size_t ARP_CACHE_TTL_MS = 30000;
+  // ARP 请求重发间隔（5秒）
+  static constexpr size_t ARP_REQUEST_TIMEOUT_MS = 5000;
 };
