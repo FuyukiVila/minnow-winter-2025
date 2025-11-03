@@ -48,5 +48,6 @@ private:
   ByteStream output_;
   std::map<uint64_t, std::string> buffer_;
   bool eof_received_ = false;
+  uint64_t eof_index_ = 0; // EOF 发生的位置
   uint64_t next_index_ = 0;
 };

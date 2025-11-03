@@ -44,12 +44,7 @@ void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Addre
     transmit( frame );
   } else {
     // 检查是否最近已发送过 ARP 请求
-    auto arp_req_it = arp_request_sent_.find( next_hop_ip );
-    if ( arp_req_it == arp_request_sent_.end() || arp_req_it->second >= ARP_REQUEST_TIMEOUT_MS ) {
-      // 如果之前的请求已超时，清空待发送队列
-      if ( arp_req_it != arp_request_sent_.end() ) {
-        pending_datagrams_.erase( next_hop_ip );
-      }
+    if ( arp_request_sent_.count( next_hop_ip ) == 0 ) {
 
       // 发送 ARP 请求
       ARPMessage arp_request;
@@ -99,7 +94,27 @@ void NetworkInterface::recv_frame( EthernetFrame frame )
     // 学习发送者的映射（无论是请求还是响应）
     arp_cache_[arp_msg.sender_ip_address] = { arp_msg.sender_ethernet_address, ARP_CACHE_TTL_MS };
 
-    // 如果有等待该 IP 的数据报，现在可以发送了
+    // 删除 ARP 请求发送记录
+    arp_request_sent_.erase( arp_msg.sender_ip_address );
+
+    // 如果是发给我的 ARP 请求，先发送响应
+    if ( arp_msg.opcode == ARPMessage::OPCODE_REQUEST && arp_msg.target_ip_address == ip_address_.ipv4_numeric() ) {
+      ARPMessage arp_reply;
+      arp_reply.opcode = ARPMessage::OPCODE_REPLY;
+      arp_reply.sender_ethernet_address = ethernet_address_;
+      arp_reply.sender_ip_address = ip_address_.ipv4_numeric();
+      arp_reply.target_ethernet_address = arp_msg.sender_ethernet_address;
+      arp_reply.target_ip_address = arp_msg.sender_ip_address;
+
+      EthernetFrame reply_frame;
+      reply_frame.header.dst = arp_msg.sender_ethernet_address;
+      reply_frame.header.src = ethernet_address_;
+      reply_frame.header.type = EthernetHeader::TYPE_ARP;
+      reply_frame.payload = serialize( arp_reply );
+      transmit( reply_frame );
+    }
+
+    // 然后，如果有等待该 IP 的数据报，现在可以发送了
     auto pending_it = pending_datagrams_.find( arp_msg.sender_ip_address );
     if ( pending_it != pending_datagrams_.end() ) {
       while ( !pending_it->second.empty() ) {
@@ -115,26 +130,6 @@ void NetworkInterface::recv_frame( EthernetFrame frame )
         pending_it->second.pop();
       }
       pending_datagrams_.erase( pending_it );
-    }
-
-    // 删除 ARP 请求发送记录
-    arp_request_sent_.erase( arp_msg.sender_ip_address );
-
-    // 如果是发给我的 ARP 请求，发送响应
-    if ( arp_msg.opcode == ARPMessage::OPCODE_REQUEST && arp_msg.target_ip_address == ip_address_.ipv4_numeric() ) {
-      ARPMessage arp_reply;
-      arp_reply.opcode = ARPMessage::OPCODE_REPLY;
-      arp_reply.sender_ethernet_address = ethernet_address_;
-      arp_reply.sender_ip_address = ip_address_.ipv4_numeric();
-      arp_reply.target_ethernet_address = arp_msg.sender_ethernet_address;
-      arp_reply.target_ip_address = arp_msg.sender_ip_address;
-
-      EthernetFrame reply_frame;
-      reply_frame.header.dst = arp_msg.sender_ethernet_address;
-      reply_frame.header.src = ethernet_address_;
-      reply_frame.header.type = EthernetHeader::TYPE_ARP;
-      reply_frame.payload = serialize( arp_reply );
-      transmit( reply_frame );
     }
   }
 }
@@ -152,8 +147,16 @@ void NetworkInterface::tick( const size_t ms_since_last_tick )
     }
   }
 
-  // 更新 ARP 请求发送时间
-  for ( auto& entry : arp_request_sent_ ) {
-    entry.second += ms_since_last_tick;
+  // 更新 ARP 请求发送时间，并清理超时的等待队列
+  for ( auto it = arp_request_sent_.begin(); it != arp_request_sent_.end(); ) {
+    it->second += ms_since_last_tick;
+
+    // 如果 ARP 请求已超时（>= 5秒），清空对应的等待队列
+    if ( it->second >= ARP_REQUEST_TIMEOUT_MS ) {
+      pending_datagrams_.erase( it->first );
+      it = arp_request_sent_.erase( it );
+    } else {
+      ++it;
+    }
   }
 }

@@ -5,30 +5,32 @@ using namespace std;
 
 void Reassembler::insert( uint64_t first_index, string data, bool is_last_substring )
 {
-  // 如果数据为空，只需要处理 EOF 标志
+  // 获取 Writer 的引用
+  auto& writer = output_.writer();
+
+  // 如果收到 is_last_substring，记录 EOF 位置
+  if ( is_last_substring ) {
+    eof_received_ = true;
+    eof_index_ = first_index + data.size();
+  }
+
+  // 如果数据为空
   if ( data.empty() ) {
-    if ( is_last_substring ) {
-      eof_received_ = true;
-      if ( buffer_.empty() ) {
-        output_.writer().close();
-      }
+    // 只有当已经到达 EOF 位置且缓冲区为空时才关闭
+    if ( eof_received_ && next_index_ >= eof_index_ && buffer_.empty() ) {
+      writer.close();
     }
     return;
   }
-
-  // 获取 Writer 的引用
-  auto& writer = output_.writer();
 
   // 计算可接受的最大索引
   uint64_t max_acceptable_index = next_index_ + writer.available_capacity();
 
   // 如果数据完全在已写入的范围之前，直接忽略
   if ( first_index + data.size() <= next_index_ ) {
-    if ( is_last_substring ) {
-      eof_received_ = true;
-      if ( buffer_.empty() ) {
-        writer.close();
-      }
+    // 数据已经写过了，检查是否需要关闭
+    if ( eof_received_ && buffer_.empty() ) {
+      writer.close();
     }
     return;
   }
@@ -46,11 +48,8 @@ void Reassembler::insert( uint64_t first_index, string data, bool is_last_substr
 
   if ( first_index + data.size() > max_acceptable_index ) {
     data = data.substr( 0, max_acceptable_index - first_index );
-    is_last_substring = false;
-  }
-
-  if ( is_last_substring ) {
-    eof_received_ = true;
+    // 如果数据被截断，就不能算是最后一个子串了
+    // 但 EOF 标志已经在前面设置过了，不需要再修改
   }
 
   // 统一处理：先将数据插入/合并到缓冲区（如果有间隙）或直接准备写入
@@ -104,8 +103,8 @@ void Reassembler::insert( uint64_t first_index, string data, bool is_last_substr
       buffer_.erase( buf_it );
     }
 
-    // 检查是否需要关闭流
-    if ( eof_received_ && buffer_.empty() ) {
+    // 检查是否需要关闭流（到达 EOF 位置且缓冲区为空）
+    if ( eof_received_ && next_index_ >= eof_index_ && buffer_.empty() ) {
       writer.close();
     }
   } else {
